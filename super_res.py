@@ -12,6 +12,7 @@ class SuperResDBPN(Network):
                  num_channels = 3,
                  base_filter = 64,
                  feat = 256,
+                 num_stages = 10,
                  upscale_factor = 4, 
                  criterion = nn.L1Loss(),
                  img_mean = [0.485, 0.456, 0.406],
@@ -37,14 +38,25 @@ class SuperResDBPN(Network):
         self.set_residual(residual)
         self.set_denorm(denorm)
         self.model = dbpn_v1.Net(num_channels=num_channels, base_filter=base_filter,
-                                 feat=feat, num_stages=10, scale_factor=upscale_factor)
+                                 feat=feat, num_stages=num_stages, scale_factor=upscale_factor)
         # print(self.model.state_dict().keys())
-        if model_weights:
-            self.model.load_state_dict(model_weights)
+        weights_loaded = False
+        try:
+            if model_weights:
+                self.model.load_state_dict(model_weights)
+                weights_loaded = True
+        except:
+            pass
         modules = list(self.model.module.named_modules())
         for n,p in modules:
             if isinstance(p, nn.Conv2d):
                 setattr(self.model.module, n, nn.utils.weight_norm(p))
+        if model_weights and not weights_loaded:
+            try:
+                self.model.load_state_dict(model_weights)
+                weights_loaded = True
+            except:
+                print('Weights not loaded.')
         self.model.to(device)
         self.set_model_params(criterion = criterion,optimizer_name = optimizer_name,lr = lr,model_name = model_name,model_type = model_type,
                               best_validation_loss = best_validation_loss,best_model_file = best_model_file)
@@ -112,7 +124,7 @@ class SuperResDBPN(Network):
                                               hr_resized[0],
                                               hr_super_res.cpu()[0]
                                               ],
-                                              filename='current_sr_model_performance.png')
+                                              fp='current_sr_model_performance.png')
                 running_psnr += 10 * math.log10(1 / loss_dict['mse'].item())
                 running_loss += loss_dict['overall_loss'].item()
                 rmse_ += rmse(hr_super_res,hr_target).cpu().numpy()
